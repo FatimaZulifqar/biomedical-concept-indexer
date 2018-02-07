@@ -27,13 +27,17 @@ public class BiomedicalConceptIndexer {
 
   public static final String FIELD_ID = "id";
   public static final String FIELD_NAME = "name";
-  public static final String FIELD_DEF = "definition";
+  public static final String FIELD_DEF = "def";
   public static final String FIELD_SYN = "synonym";
+  public static final String FIELD_SOURCE = "source";
+  public static final String FIELD_ONTOLOGY = "ontology";
+  
+  public static String source = "";
 
   public static void main(String[] args) throws Exception {
 
     createIndex();
-    searchIndex("definition:sarcoma");
+    //searchIndex("source:http://amigo.geneontology.org/cgi-bin/amigo/term_details?term=");
   }
 
   public static void createIndex() throws CorruptIndexException, LockObtainFailedException, IOException {
@@ -46,30 +50,64 @@ public class BiomedicalConceptIndexer {
     File[] files = dir.listFiles();
     for (File file : files) {
       if (file.getName().compareTo(".DS_Store") == 0){continue;}
-
+      System.out.println("Indexing "+file.getName()+"...");
+      Document document = null;
       BufferedReader reader = new BufferedReader(new FileReader(file));
 
       String line = null;
       while ((line = reader.readLine()) != null){
-        Document document = new Document();
-        String []terms = line.split("@#");
-        if (terms.length != 4){
-          System.out.println("Error data format");
-          return;
+        
+        String []terms = line.split(": ");
+        if (terms.length <2){
+          //System.out.println("Error data format");
+          continue;
         }
-        document.add(new Field(FIELD_ID, terms[0], TextField.TYPE_STORED));
-        if (terms[1].compareTo("null") != 0){
-          document.add(new Field(FIELD_NAME, terms[1].substring(4), TextField.TYPE_STORED));
+        if(terms[1].contains("\"")) {
+        	terms[1]=terms[1].substring(1);
+        	try {
+        		terms[1]=terms[1].substring(0, terms[1].indexOf("\""));
+        	}catch (Exception e) {
+				// TODO: handle exception
+			}
         }
-        if (terms[2].compareTo("null") != 0){
-          document.add(new Field(FIELD_DEF, terms[2].substring(4), TextField.TYPE_STORED));
+       // System.out.println(terms[1]);
+        terms[1]=terms[1].trim();
+        
+        if(terms[0].equals(FIELD_ONTOLOGY)) {
+        	source=terms[1];
         }
-        if (terms[3].compareTo("null") != 0){
-          document.add(new Field(FIELD_SYN, terms[3].substring(4), TextField.TYPE_STORED));
+        
+        if(terms[0].equals(FIELD_ID)) {
+        	if(document!=null)
+        		indexWriter.addDocument(document);
+        	document=new Document();
+        	document.add(new Field(FIELD_ID, terms[1], TextField.TYPE_STORED));
+        	
+        	//add the source url for every term
+        	
+        	//source = "http://amigo.geneontology.org/cgi-bin/amigo/term_details?term=";
+            //source = "http://www.disease-ontology.org/api/metadata/";
+            //source = "http://www.biosemantics.org/jochem#";
+            //source = "https://meshb.nlm.nih.gov/record/ui?ui=";
+            
+            document.add(new Field(FIELD_SOURCE, source, TextField.TYPE_STORED));
         }
-        indexWriter.addDocument(document);
+        if(terms[0].equals(FIELD_NAME)) {
+        	document.add(new Field(FIELD_NAME, terms[1], TextField.TYPE_STORED));
+        }
+        if(terms[0].equals(FIELD_DEF)) {
+        	document.add(new Field(FIELD_DEF, terms[1], TextField.TYPE_STORED));
+        }
+        if(terms[0].equals(FIELD_SYN)) {
+        	document.add(new Field(FIELD_SYN, terms[1], TextField.TYPE_STORED));
+        }
       }
+      if(document!=null) {
+    	  indexWriter.addDocument(document);
+      }
+      indexWriter.commit();
     }
+    //indexWriter.forceMerge(1);
     indexWriter.close();
   }
 
